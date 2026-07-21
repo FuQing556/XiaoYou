@@ -3,25 +3,25 @@ cd /d "%~dp0"
 title 小悠 v2
 
 echo ================================
-echo   小悠 v2 — Starting...
+echo   小悠 v2
 echo ================================
+echo.
 
-:: Check .env
-if not exist ".env" (
-    echo [WARN] .env not found. Create one with: DEEPSEEK_API_KEY=your_key
-)
+:: 1. Backend
+echo [1/2] Starting backend on port 8765...
+start "xiaoyou-backend" cmd /c "cd /d %~dp0backend && python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 && pause"
 
-:: Start backend
-echo [1/2] Starting backend...
-start "xiaoyou-backend" /min cmd /c "cd /d %~dp0backend && python -m uvicorn app.main:app --host 127.0.0.1 --port 8765"
+:: 2. Wait
+ping 127.0.0.1 -n 3 >nul
 
-:: Wait for backend
-echo Waiting for backend...
-timeout /t 3 /nobreak >nul
-
-:: Start frontend
+:: 3. Frontend
 echo [2/2] Starting frontend...
-call npx electron . --dev
+echo.
+"%~dp0node_modules\electron\dist\electron.exe" "%~dp0" --dev
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Electron failed (code: %errorlevel%)
+)
 
 echo.
 echo 小悠已关闭.
