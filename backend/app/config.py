@@ -3,8 +3,13 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # ── 路径 ──
 BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
+
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 DB_PATH = str(DATA_DIR / "xiaoyou_v2.db")

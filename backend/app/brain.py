@@ -87,6 +87,8 @@ class Brain:
             "type": "mode",
             "mode": self._mode,
         })
+        # 延迟发送问候（等前端完成初始化）
+        asyncio.create_task(self._delayed_greet(ws))
 
     def disconnect(self, ws: WebSocket):
         if ws in self._connections:
@@ -414,31 +416,38 @@ class Brain:
         await self._broadcast(msg)
 
     # ── 启动问候 ──
-    async def _send_greeting(self):
-        hour = time.localtime().tm_hour
-        if hour < 6:
-            greeting = "这么早……你是不睡觉的吗……"
-        elif hour < 9:
-            greeting = "早上好～新的一天开始啦。"
-        elif hour < 12:
-            greeting = "上午好呀。"
-        elif hour < 14:
-            greeting = "中午了……有点困呢……"
-        elif hour < 18:
-            greeting = "下午好～"
-        elif hour < 22:
-            greeting = "晚上好！"
-        else:
-            greeting = "这么晚还不睡呀……"
+    async def _delayed_greet(self, ws: WebSocket):
+        """首次连接时发送问候"""
+        await asyncio.sleep(1.5)
+        greeting = self._make_greeting()
+        await self._send_to(ws, {
+            "type": "perform",
+            "text": greeting,
+            "expression": None,
+            "actions": [{"name": "playful", "at": 0}],
+            "audio_url": None,
+        })
 
+    def _make_greeting(self) -> str:
+        hour = time.localtime().tm_hour
+        if hour < 6:    return "这么早……你是不睡觉的吗……"
+        elif hour < 9:  return "早上好～新的一天开始啦。"
+        elif hour < 12: return "上午好呀。"
+        elif hour < 14: return "中午了……有点困呢……"
+        elif hour < 18: return "下午好～"
+        elif hour < 22: return "晚上好！"
+        else:           return "这么晚还不睡呀……"
+
+    async def _send_greeting(self):
+        """启动时广播问候（所有已连接客户端）"""
+        greeting = self._make_greeting()
         await self._broadcast({
             "type": "perform",
             "text": greeting,
             "expression": None,
-            "actions": [{"name": "sleepy" if hour < 6 or hour >= 22 else "playful", "at": 0}],
+            "actions": [{"name": "sleepy" if 6 <= time.localtime().tm_hour < 9 or time.localtime().tm_hour >= 22 else "playful", "at": 0}],
             "audio_url": None,
         })
-        self.memory.record_event("greeting", greeting, importance=0.3)
 
     # ── 音频访问 ──
     def get_audio(self, audio_id: str) -> bytes | None:

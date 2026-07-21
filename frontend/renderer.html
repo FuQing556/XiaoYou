@@ -449,8 +449,8 @@ document.addEventListener('click', (e) => {
 });
 let clickHistory = [];
 
-// ── 启动 ──
-document.addEventListener('DOMContentLoaded', init);
+// 启动 — 直接调用，脚本在 body 底部时 DOM 已就绪
+init();
 </script>
 </body>
 </html>
