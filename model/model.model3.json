@@ -1,0 +1,47 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "model.moc3",
+		"Textures": [
+			"textures/texture_00.png",
+			"textures/texture_01.png"
+		],
+		"Physics": "model.physics3.json",
+		"DisplayInfo": "model.cdi3.json"
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		},
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": []
+		}
+	],
+	"Expressions": [
+		{"Name": "星星眼", "File": "exp/星星眼.exp3.json"},
+		{"Name": "哭哭", "File": "exp/哭哭.exp3.json"},
+		{"Name": "晕晕眼", "File": "exp/晕晕眼.exp3.json"},
+		{"Name": "脸红", "File": "exp/脸红.exp3.json"},
+		{"Name": "扶脸", "File": "exp/扶脸.exp3.json"},
+		{"Name": "前倾", "File": "exp/前倾.exp3.json"},
+		{"Name": "流泪", "File": "exp/流泪.exp3.json"},
+		{"Name": "黑脸", "File": "exp/黑脸.exp3.json"},
+		{"Name": "飞头", "File": "exp/飞头.exp3.json"},
+		{"Name": "看手机", "File": "exp/看手机.exp3.json"},
+		{"Name": "记笔记", "File": "exp/记笔记.exp3.json"},
+		{"Name": "水印开关", "File": "exp/水印开关.exp3.json"},
+		{"Name": "隐藏发夹", "File": "exp/隐藏发夹.exp3.json"},
+		{"Name": "隐藏外套", "File": "exp/隐藏外套.exp3.json"},
+		{"Name": "隐藏帽子", "File": "exp/隐藏帽子.exp3.json"},
+		{"Name": "隐藏耳朵", "File": "exp/隐藏耳朵.exp3.json"}
+	],
+	"Motions": {
+		"idle": [
+			{"File": "exp/常规.motion3.json"}
+		]
+	}
+}

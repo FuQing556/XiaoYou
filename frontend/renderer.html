@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>小悠 v2</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:transparent; overflow:hidden; font-family:system-ui; }
+#bubble { position:absolute; bottom:500px; left:50%; transform:translateX(-50%); background:rgba(255,255,255,0.92); color:#333; padding:8px 16px; border-radius:18px; font-size:14px; max-width:380px; text-align:center; display:none; white-space:pre-wrap; word-break:break-word; box-shadow:0 2px 12px rgba(0,0,0,0.1); pointer-events:none; }
+#bubble::after { content:''; position:absolute; bottom:-8px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-top:8px solid rgba(255,255,255,0.92); }
+#status { position:fixed; top:4px; right:8px; font-size:11px; color:rgba(255,255,255,0.5); font-family:monospace; display:none; }
+</style>
+</head>
+<body>
+<div id="bubble"></div>
+<div id="status"></div>
+
+<script src="../node_modules/pixi.js/dist/pixi.min.js"></script>
+<script src="lib/live2dcubismcore.min.js"></script>
+<script src="../node_modules/pixi-live2d-display/dist/index.min.js"></script>
+<script>
+// ============================================================
+// 小悠 v2 前端渲染器 — 纯播放引擎
+// ============================================================
+
+// ── 状态 ──
+let model, core, app;
+let activeExpression = null, expressionTimer = null;
+let actionQueue = [];
+let mouthUntil = 0;
+let animTime = 0;
+let currentAudio = null;
+let bubbleTimer = null;
+let ws = null;
+let connectionOk = false;
+
+// System 1 状态
+let idleDrift = { x:0, y:0, z:0, tx:0, ty:0, tz:0, nextChange:0 };
+let blinkState = { next:2, closing:false, closed:false, count:0, targetCount:1, interval:2 };
+let gazeState = { x:0.5, y:0.5, next:0.5, targetX:0.5, targetY:0.5 };
+let browState = { ly:0.5, ry:0.5, lf:0.5, rf:0.5 };
+let earState = { lOpen:0.7, rOpen:0.7, lExpr:0.5, rExpr:0.5, nextFlick:0 };
+let tailPhase = 0;
+
+// ── 表达式 + 动作定义 (与后端 personality.py 对应) ──
+const EXPR_PARAMS = {
+  neutral: [],
+  star_eyes: [['Param107',1]],
+  blush: [['Param111',1]],
+  black_face: [['Param110',1]],
+  cry: [['Param113',1]],
+  dizzy: [['Param135',1]],
+  facepalm: [['Param83',1]],
+};
+
+const ACTION_MAP = {
+  // 复合动作
+  excited:    { params:[['Param107',1],['Param111',0.3],['Param27',1],['Param45',1],['ParamEyeLSmile',0.4],['ParamEyeRSmile',0.4]], dur:4.0, expr:'star_eyes' },
+  shy:        { params:[['Param111',1],['ParamAngleY',0.35],['ParamEyeBallX',0.35],['ParamEyeBallY',0.55],['Param27',0.5],['Param45',0.5]], dur:4.0, expr:'blush' },
+  proud:      { params:[['ParamAngleY',0.75],['ParamEyeLSmile',0.5],['ParamEyeRSmile',0.5],['Param27',1],['Param45',1]], dur:3.0 },
+  curious:    { params:[['ParamAngleZ',0.75],['ParamAngleY2',0.7],['ParamEyeLOpen',1],['ParamEyeROpen',1],['ParamEyeBallX',0.55],['Param27',1],['Param45',0.4]], dur:4.0 },
+  scared:     { params:[['Param135',1],['Param27',0],['Param45',0],['ParamAngleY2',0.3],['ParamEyeLOpen',1],['ParamEyeROpen',1]], dur:3.0, expr:'dizzy' },
+  angry:      { params:[['Param110',1],['Param27',0.1],['Param45',0.1],['ParamBrowLY',0.2],['ParamBrowRY',0.2]], dur:4.0, expr:'black_face' },
+  sad:        { params:[['Param113',1],['Param27',0.4],['Param45',0.4],['ParamAngleY',0.35],['ParamEyeBallY',0.3]], dur:5.0, expr:'cry' },
+  sleepy:     { params:[['ParamEyeLOpen',0.3],['ParamEyeROpen',0.3],['Param27',0.3],['Param45',0.3],['ParamMouthOpenY',0.6]], dur:3.0 },
+  thinking:   { params:[['Param83',0.6],['ParamAngleZ',0.6],['ParamEyeBallY',0.7],['ParamBrowLForm',0.3],['ParamBrowRForm',0.3]], dur:4.0, expr:'facepalm' },
+  surprised:  { params:[['ParamEyeLOpen',1],['ParamEyeROpen',1],['ParamMouthOpenY',0.6],['Param27',1],['Param45',1],['ParamAngleY2',0.35],['ParamBrowLY',0.8],['ParamBrowRY',0.8]], dur:3.0 },
+  playful:    { params:[['Param107',1],['Param27',1],['Param45',1],['ParamAngleY2',0.7],['ParamEyeLOpen',0.02],['ParamEyeROpen',1]], dur:3.0, expr:'star_eyes' },
+  // 独立动作
+  nod:        { params:[['ParamAngleX',0.8]], dur:1.2 },
+  shake:      { params:[['ParamAngleZ',0.8]], dur:1.0 },
+  wink:       { params:[['ParamEyeROpen',0.02]], dur:0.35 },
+  tilt:       { params:[['ParamAngleZ',0.75]], dur:2.5 },
+};
+
+// ============================================================
+// 初始化
+// ============================================================
+async function init() {
+  app = new PIXI.Application({
+    view: document.createElement('canvas'),
+    width: 500, height: 620,
+    backgroundAlpha: 0,
+    antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
+  });
+  document.body.appendChild(app.view);
+
+  try {
+    model = await PIXI.live2d.Live2DModel.from('../model/model.model3.json');
+    app.stage.addChild(model);
+    model.scale.set(0.0647);
+    model.x = 250; model.y = 120;
+    core = model.internalModel.coreModel;
+    statusLog('model loaded');
+  } catch(e) {
+    statusLog('model error: ' + e.message);
+  }
+
+  app.ticker.add(loop);
+  connectWS();
+}
+
+// ============================================================
+// WebSocket
+// ============================================================
+function connectWS() {
+  ws = new WebSocket('ws://127.0.0.1:8765/ws');
+  ws.onopen = () => { connectionOk = true; statusLog('ws connected'); };
+  ws.onclose = () => { connectionOk = false; statusLog('ws closed, retry in 3s'); setTimeout(connectWS, 3000); };
+  ws.onerror = () => { ws.close(); };
+  ws.onmessage = (e) => {
+    try { handleMessage(JSON.parse(e.data)); } catch(ex) {}
+  };
+}
+
+function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+
+function handleMessage(msg) {
+  switch(msg.type) {
+    case 'perform': perform(msg); break;
+    case 'cancel': cancel(); break;
+    case 'thinking': statusLog(msg.state === 'start' ? 'thinking...' : ''); break;
+    case 'emotion': break; // 面板使用
+    case 'mode': statusLog('mode: ' + msg.mode); break;
+  }
+}
+
+// ============================================================
+// perform / cancel
+// ============================================================
+function perform(cmd) {
+  // Cancel 当前内容
+  cancel();
+
+  // 表情
+  if (cmd.expression) {
+    setExpression(cmd.expression);
+  }
+
+  // 动作
+  if (cmd.actions && Array.isArray(cmd.actions)) {
+    cmd.actions.forEach(a => {
+      const def = ACTION_MAP[a.name];
+      if (!def) return;
+      const at = Math.max(0, a.at || 0);
+      actionQueue.push({
+        name: a.name,
+        params: def.params,
+        dur: def.duration || def.dur || 2.0,
+        expr: def.expr || null,
+        start: animTime + at,
+        end: animTime + at + (def.duration || def.dur || 2.0),
+      });
+      if (def.expr) setExpression(def.expr);
+    });
+    // 按 at 排序
+    actionQueue.sort((x, y) => x.start - y.start);
+  }
+
+  // 气泡
+  if (cmd.text) {
+    showBubble(cmd.text);
+  }
+
+  // 音频
+  if (cmd.audio_url) {
+    playAudio(cmd.audio_url);
+  }
+}
+
+function cancel() {
+  actionQueue = [];
+  clearExpression();
+  hideBubble();
+  stopAudio();
+}
+
+// ── 表情 ──
+function setExpression(name) {
+  clearExpression();
+  activeExpression = name;
+  applyExpressionParams(name, 1);
+  expressionTimer = setTimeout(() => clearExpression(), 4000);
+}
+
+function clearExpression() {
+  if (activeExpression) {
+    applyExpressionParams(activeExpression, 0);
+    activeExpression = null;
+  }
+  if (expressionTimer) { clearTimeout(expressionTimer); expressionTimer = null; }
+}
+
+function applyExpressionParams(name, value) {
+  const params = EXPR_PARAMS[name];
+  if (!params) return;
+  params.forEach(([id]) => {
+    if (core) {
+      try { core.setParameterValueById(id, value); } catch(e){}
+    }
+  });
+}
+
+// ── 气泡 ──
+function showBubble(text) {
+  const el = document.getElementById('bubble');
+  el.textContent = text;
+  el.style.display = 'block';
+  if (bubbleTimer) clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(hideBubble, 12000); // 最长 12s
+}
+
+function hideBubble() {
+  document.getElementById('bubble').style.display = 'none';
+  if (bubbleTimer) { clearTimeout(bubbleTimer); bubbleTimer = null; }
+}
+
+// ── 音频 ──
+function playAudio(url) {
+  stopAudio();
+  mouthUntil = animTime + 15; // 默认 15s 嘴部动画
+  currentAudio = new Audio(url);
+  currentAudio.preload = 'auto';
+  currentAudio.play().catch(() => {});
+  currentAudio.onended = () => { mouthUntil = 0; hideBubble(); };
+  currentAudio.onerror = () => { mouthUntil = 0; };
+}
+
+function stopAudio() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = '';
+    currentAudio = null;
+  }
+  mouthUntil = 0;
+}
+
+// ============================================================
+// 主循环
+// ============================================================
+function loop(dt) {
+  const delta = dt / 60; // PixiJS v7 ticker delta 是帧差
+  animTime += delta;
+
+  if (!core) return;
+
+  applySystem1_IdleDrift(delta);
+  applySystem1_Blink(delta);
+  applySystem1_EyeGaze(delta);
+  applySystem1_Brow(delta);
+  applySystem1_Mouth(delta);
+  applySystem1_Ears(delta);
+  applySystem1_Tail(delta);
+  applySystem2_Actions();
+}
+
+// ── System 1: 头部漂移 ──
+function applySystem1_IdleDrift(dt) {
+  const s = idleDrift;
+  if (animTime > s.nextChange) {
+    s.tx = 0.4 + Math.random() * 0.2;   // 0.4-0.6
+    s.ty = 0.45 + Math.random() * 0.1;
+    s.tz = 0.45 + Math.random() * 0.1;
+    s.nextChange = animTime + 3 + Math.random() * 5;
+  }
+  const speed = 0.3;
+  s.x += (s.tx - s.x) * speed * dt;
+  s.y += (s.ty - s.y) * speed * dt;
+  s.z += (s.tz - s.z) * speed * dt;
+  safeSet('ParamAngleX', s.x);
+  safeSet('ParamAngleY', s.y);
+  safeSet('ParamAngleZ', s.z);
+}
+
+// ── System 1: 眨眼 ──
+function applySystem1_Blink(dt) {
+  const bs = blinkState;
+  if (animTime > bs.next && !bs.closing) {
+    bs.closing = true;
+    bs.closed = false;
+    bs.count = 0;
+    bs.targetCount = Math.random() < 0.15 ? 2 : 1;
+    bs.interval = 2 + Math.random() * 4;
+    bs.phaseStart = animTime;
+  }
+  if (bs.closing) {
+    const elapsed = animTime - bs.phaseStart;
+    if (!bs.closed) {
+      // 闭眼阶段 0.07s
+      const v = 1 - easeIn(elapsed, 0.07);
+      safeSet('ParamEyeLOpen', Math.max(0.01, v));
+      safeSet('ParamEyeROpen', Math.max(0.01, v));
+      if (elapsed > 0.07) {
+        bs.closed = true;
+        bs.phaseStart = animTime;
+      }
+    } else {
+      // 睁眼阶段 0.15s
+      const v = easeOut(elapsed, 0.15);
+      safeSet('ParamEyeLOpen', Math.max(0.01, v));
+      safeSet('ParamEyeROpen', Math.max(0.01, v));
+      if (elapsed > 0.15) {
+        bs.closing = false;
+        bs.count++;
+        safeSet('ParamEyeLOpen', 1);
+        safeSet('ParamEyeROpen', 1);
+        if (bs.count < bs.targetCount) {
+          // 连眨: 短暂停顿后再来一次
+          bs.phaseStart = animTime + 0.12;
+          bs.closing = true;
+          bs.closed = false;
+        } else {
+          bs.next = animTime + bs.interval;
+        }
+      }
+    }
+  }
+}
+
+function easeIn(t, dur) { return Math.max(0, Math.min(1, t / dur)); }
+function easeOut(t, dur) { const x = Math.max(0, Math.min(1, t / dur)); return 1 - Math.pow(1 - x, 3); }
+
+// ── System 1: 眼珠扫视 ──
+function applySystem1_EyeGaze(dt) {
+  const gs = gazeState;
+  if (animTime > gs.next) {
+    // saccade: 瞬间跳
+    gs.targetX = 0.2 + Math.random() * 0.6;
+    gs.targetY = 0.25 + Math.random() * 0.5;
+    gs.next = animTime + 0.3 + Math.random() * 2.0;
+  }
+  const spd = 15; // 快速趋近
+  gs.x += (gs.targetX - gs.x) * spd * dt;
+  gs.y += (gs.targetY - gs.y) * spd * dt;
+  safeSet('ParamEyeBallX', gs.x);
+  safeSet('ParamEyeBallY', gs.y);
+}
+
+// ── System 1: 眉毛 ──
+function applySystem1_Brow(dt) {
+  // 微动 + 情绪联动 (目前简易实现)
+  const wave = Math.sin(animTime * 0.7) * 0.05;
+  safeSet('ParamBrowLY', 0.5 + wave);
+  safeSet('ParamBrowRY', 0.5 + wave * 0.8);
+  safeSet('ParamBrowLForm', 0.5 + wave * 0.3);
+  safeSet('ParamBrowRForm', 0.5 + wave * 0.3);
+}
+
+// ── System 1: 嘴巴 ──
+function applySystem1_Mouth(dt) {
+  if (animTime < mouthUntil && currentAudio && !currentAudio.paused) {
+    // TTS 嘴型
+    const freq = 3 + Math.sin(animTime * 7) * 2;
+    const v = 0.05 + Math.abs(Math.sin(animTime * Math.PI * freq)) * 0.5;
+    safeSet('ParamMouthOpenY', Math.min(0.95, v));
+  } else if (animTime >= mouthUntil) {
+    safeSet('ParamMouthOpenY', 0.01);
+  }
+}
+
+// ── System 1: 耳朵 ──
+function applySystem1_Ears(dt) {
+  const es = earState;
+  // 慢速环境摆动
+  const envWave = Math.sin(animTime * 0.5) * 0.1;
+  // 随机抽动
+  if (animTime > es.nextFlick) {
+    es.lOpen = 0.6 + Math.random() * 0.3;
+    es.rOpen = 0.6 + Math.random() * 0.3;
+    es.nextFlick = animTime + 3 + Math.random() * 8;
+  }
+  const lVal = es.lOpen + envWave;
+  const rVal = es.rOpen + envWave * 1.2;
+  safeSet('Param27', Math.max(0.1, Math.min(1, lVal)));
+  safeSet('Param45', Math.max(0.1, Math.min(1, rVal)));
+  safeSet('Param8', 0.4 + Math.sin(animTime * 0.6) * 0.15);
+  safeSet('Param31', 0.4 + Math.cos(animTime * 0.55) * 0.15);
+}
+
+// ── System 1: 尾巴 ──
+function applySystem1_Tail(dt) {
+  tailPhase += dt * 1.2;
+  for (let i = 0; i < 17; i++) {
+    const phase = tailPhase - i * 0.08;
+    const amp = 0.3 + i * 0.03; // 末节振幅更大
+    const angle = 0.5 + Math.sin(phase) * amp;
+    safeSet(`Param_Angle_Rotation_${i+1}_ArtMesh212`, angle);
+  }
+}
+
+// ── System 2: 动作覆盖 ──
+function applySystem2_Actions() {
+  if (actionQueue.length === 0) return;
+  // 清理已结束的动作
+  actionQueue = actionQueue.filter(a => animTime < a.end);
+  // 执行在时间窗口内的动作
+  actionQueue.forEach(a => {
+    if (animTime >= a.start && animTime < a.end) {
+      const elapsed = animTime - a.start;
+      const progress = Math.min(1, elapsed / a.dur);
+      // 缓动: 快达到目标 → 保持 → 快恢复
+      let factor;
+      if (progress < 0.15) factor = easeIn(progress, 0.15);           // 快进
+      else if (progress < 0.75) factor = 1;                            // 保持
+      else factor = 1 - easeIn(progress - 0.75, 0.25);                 // 恢复
+
+      a.params.forEach(([id, target]) => {
+        // 计算当前值，插值到目标
+        const base = getCurrentBase(id);
+        const val = base + (target - base) * factor;
+        safeSet(id, val);
+      });
+    }
+  });
+}
+
+function getCurrentBase(id) {
+  // 返回该参数的"基值"(0.5 或来自 System1 的值)
+  // 对于角度参数，基值是 0.5
+  if (id.startsWith('ParamAngle') || id.startsWith('ParamBody')) return 0.5;
+  if (id.startsWith('ParamEye') && (id.includes('Open') || id.includes('Ball'))) return 0.5;
+  return 0.5;
+}
+
+// ── 辅助 ──
+function safeSet(id, value) {
+  if (!core) return;
+  try { core.setParameterValueById(id, Math.max(0, Math.min(1, value))); } catch(e){}
+}
+
+function statusLog(msg) {
+  const el = document.getElementById('status');
+  el.textContent = msg || '';
+  el.style.display = msg ? 'block' : 'none';
+}
+
+// ── 键盘事件 (点击/戳) ──
+document.addEventListener('click', (e) => {
+  // 检测双击/连击
+  const now = Date.now();
+  clickHistory.push(now);
+  while (clickHistory.length > 0 && clickHistory[0] < now - 800) clickHistory.shift();
+  if (clickHistory.length >= 3) {
+    send({type:'interact', action:'poke'});
+    clickHistory = [];
+  }
+});
+let clickHistory = [];
+
+// ── 启动 ──
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

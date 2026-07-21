@@ -1,0 +1,22 @@
+{
+  "name": "xiaoyou-v2",
+  "version": "2.0.0",
+  "description": "小悠 v2 — Live2D Desktop Catgirl",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "backend": "cd backend && python -m uvicorn app.main:app --host 127.0.0.1 --port 8765"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "pixi-live2d-display": "^0.4.0",
+    "pixi.js": "^7.4.3"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  }
+}

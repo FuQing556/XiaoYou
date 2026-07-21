@@ -1,0 +1,15 @@
+小悠 v2 — 快捷键一览
+====================
+
+Ctrl+Shift+Y      切换模式 (安静 → 日常 → 活泼 → 乖巧 → 循环)
+Ctrl+Shift+H      隐藏 / 显示
+Ctrl+Shift+M      静音 / 取消静音
+Ctrl+Shift+↑      放大一档 (0.6 → 0.8 → 1.0 → 1.2 → 1.5 → 2.0)
+Ctrl+Shift+↓      缩小一档
+Ctrl+Shift+←      上一个模式
+Ctrl+Shift+→      下一个模式
+
+调试快捷键 (不对外展示):
+Ctrl+Shift+D      诊断浮层 (情感 / 模式 / LLM状态 / FPS)
+Ctrl+Shift+R      强制重载模型
+Ctrl+Shift+Q      退出程序
