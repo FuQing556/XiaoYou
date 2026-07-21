@@ -121,8 +121,14 @@ ipcMain.handle('send-to-backend', async (event, msg) => {
   return { ok: true };
 });
 
+// Check --dev flag
+const isDev = process.argv.includes('--dev');
+
 app.whenReady().then(() => {
   createWindow();
+  if (isDev) {
+    win?.webContents.openDevTools({ mode: 'detach' });
+  }
   registerShortcuts();
 });
 
