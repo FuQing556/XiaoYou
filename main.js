@@ -1,14 +1,24 @@
 // 小悠 v2 — Electron 主进程
 const { app, BrowserWindow, globalShortcut, screen, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
+
+// 日志文件
+const LOG = path.join(app.getPath('userData'), 'xiaoyou_renderer.log');
 
 let win = null;
-let scaleIndex = 2;  // 对应 1.0x
+let scaleIndex = 2;
 const SCALES = [0.6, 0.8, 1.0, 1.2, 1.5, 2.0];
 const BASE_W = 500;
 const BASE_H = 620;
 
 function getScale() { return SCALES[scaleIndex] || 1.0; }
+
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try { fs.appendFileSync(LOG, line); } catch(e) {}
+  console.log(msg);
+}
 
 function createWindow() {
   const s = getScale();
@@ -35,12 +45,30 @@ function createWindow() {
     },
   });
 
+  // 捕获渲染进程日志
+  win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    const prefix = ['VERBOSE','INFO','WARN','ERROR'][level] || 'LOG';
+    log(`[renderer ${prefix}] ${message}  (${sourceId}:${line})`);
+  });
+
+  // 捕获未处理异常
+  win.webContents.on('render-process-gone', (event, details) => {
+    log(`[FATAL] Render process gone: reason=${details.reason} exitCode=${details.exitCode}`);
+  });
+
+  // 捕获页面加载错误
+  win.webContents.on('did-fail-load', (event, code, desc, url) => {
+    log(`[FATAL] Page load failed: ${code} ${desc} (${url})`);
+  });
+
+  // 页面加载完成
+  win.webContents.on('did-finish-load', () => {
+    log('[OK] Page loaded');
+  });
+
   win.loadFile('frontend/renderer.html');
-  win.setAlwaysOnTop(true, 'normal');  // 低于任务栏
-
-  // 监听任务栏变化
+  win.setAlwaysOnTop(true, 'normal');
   screen.on('display-metrics-changed', repositionWindow);
-
   win.on('closed', () => { win = null; });
 }
 
@@ -67,64 +95,27 @@ function applyScale() {
 }
 
 function registerShortcuts() {
-  // 模式切换
-  globalShortcut.register('CommandOrControl+Shift+Y', () => {
-    win?.webContents.send('shortcut', 'cycle-mode');
-  });
-
-  // 隐藏/显示
-  globalShortcut.register('CommandOrControl+Shift+H', () => {
-    if (win?.isVisible()) win.hide();
-    else win?.show();
-  });
-
-  // 静音
-  globalShortcut.register('CommandOrControl+Shift+M', () => {
-    win?.webContents.send('shortcut', 'toggle-mute');
-  });
-
-  // 缩放
-  globalShortcut.register('CommandOrControl+Shift+Up', () => {
-    if (scaleIndex < SCALES.length - 1) { scaleIndex++; applyScale(); }
-  });
-  globalShortcut.register('CommandOrControl+Shift+Down', () => {
-    if (scaleIndex > 0) { scaleIndex--; applyScale(); }
-  });
-
-  // 模式左右导航
-  globalShortcut.register('CommandOrControl+Shift+Left', () => {
-    win?.webContents.send('shortcut', 'mode-prev');
-  });
-  globalShortcut.register('CommandOrControl+Shift+Right', () => {
-    win?.webContents.send('shortcut', 'mode-next');
-  });
-
-  // 调试
-  globalShortcut.register('CommandOrControl+Shift+D', () => {
-    win?.webContents.openDevTools({ mode: 'detach' });
-  });
-
-  // 重载
-  globalShortcut.register('CommandOrControl+Shift+R', () => {
-    win?.webContents.reload();
-  });
-
-  // 退出
-  globalShortcut.register('CommandOrControl+Shift+Q', () => {
-    app.quit();
-  });
+  globalShortcut.register('CommandOrControl+Shift+Y', () => { win?.webContents.send('shortcut', 'cycle-mode'); });
+  globalShortcut.register('CommandOrControl+Shift+H', () => { win?.isVisible() ? win.hide() : win?.show(); });
+  globalShortcut.register('CommandOrControl+Shift+M', () => { win?.webContents.send('shortcut', 'toggle-mute'); });
+  globalShortcut.register('CommandOrControl+Shift+Up', () => { if (scaleIndex < SCALES.length - 1) { scaleIndex++; applyScale(); } });
+  globalShortcut.register('CommandOrControl+Shift+Down', () => { if (scaleIndex > 0) { scaleIndex--; applyScale(); } });
+  globalShortcut.register('CommandOrControl+Shift+Left', () => { win?.webContents.send('shortcut', 'mode-prev'); });
+  globalShortcut.register('CommandOrControl+Shift+Right', () => { win?.webContents.send('shortcut', 'mode-next'); });
+  globalShortcut.register('CommandOrControl+Shift+D', () => { win?.webContents.openDevTools({ mode: 'detach' }); });
+  globalShortcut.register('CommandOrControl+Shift+R', () => { win?.webContents.reload(); });
+  globalShortcut.register('CommandOrControl+Shift+Q', () => { app.quit(); });
 }
 
-// IPC: 前端请求后端指令
-ipcMain.handle('send-to-backend', async (event, msg) => {
-  // 前端通过 WebSocket 直连后端，此 IPC 保留备用
-  return { ok: true };
-});
+ipcMain.handle('send-to-backend', async () => ({ ok: true }));
 
-// Check --dev flag
 const isDev = process.argv.includes('--dev');
 
 app.whenReady().then(() => {
+  log('[START] XiaoYou v2 launching...');
+  log(`[START] Project dir: ${__dirname}`);
+  log(`[START] Renderer: ${path.join(__dirname, 'frontend', 'renderer.html')}`);
+  log(`[START] exists: ${fs.existsSync(path.join(__dirname, 'frontend', 'renderer.html'))}`);
   createWindow();
   if (isDev) {
     win?.webContents.openDevTools({ mode: 'detach' });
@@ -133,11 +124,13 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  log('[STOP] Window closed');
   globalShortcut.unregisterAll();
   app.quit();
 });
 
 app.on('will-quit', () => {
+  log('[STOP] App quitting');
   globalShortcut.unregisterAll();
 });
 

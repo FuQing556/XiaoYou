@@ -17,7 +17,7 @@ body { background:transparent; overflow:hidden; font-family:system-ui; }
 
 <script src="../node_modules/pixi.js/dist/pixi.min.js"></script>
 <script src="lib/live2dcubismcore.min.js"></script>
-<script src="../node_modules/pixi-live2d-display/dist/index.min.js"></script>
+<script src="../node_modules/pixi-live2d-display/dist/cubism4.min.js"></script>
 <script>
 // ============================================================
 // 小悠 v2 前端渲染器 — 纯播放引擎
@@ -77,6 +77,7 @@ const ACTION_MAP = {
 // 初始化
 // ============================================================
 async function init() {
+  console.log('[renderer] init() started');
   app = new PIXI.Application({
     view: document.createElement('canvas'),
     width: 500, height: 620,
@@ -86,15 +87,21 @@ async function init() {
     autoDensity: true,
   });
   document.body.appendChild(app.view);
+  console.log('[renderer] PIXI app created');
 
   try {
+    console.log('[renderer] loading model...');
     model = await PIXI.live2d.Live2DModel.from('../model/model.model3.json');
+    console.log('[renderer] model loaded, adding to stage');
     app.stage.addChild(model);
     model.scale.set(0.0647);
     model.x = 250; model.y = 120;
     core = model.internalModel.coreModel;
+    console.log('[renderer] model ready, core=' + !!core);
     statusLog('model loaded');
   } catch(e) {
+    console.log('[renderer] MODEL ERROR: ' + e.message);
+    console.error(e);
     statusLog('model error: ' + e.message);
   }
 
@@ -106,23 +113,25 @@ async function init() {
 // WebSocket
 // ============================================================
 function connectWS() {
+  console.log('[renderer] connecting WebSocket...');
   ws = new WebSocket('ws://127.0.0.1:8765/ws');
-  ws.onopen = () => { connectionOk = true; statusLog('ws connected'); };
-  ws.onclose = () => { connectionOk = false; statusLog('ws closed, retry in 3s'); setTimeout(connectWS, 3000); };
-  ws.onerror = () => { ws.close(); };
+  ws.onopen = () => { connectionOk = true; console.log('[renderer] WS connected'); statusLog('ws connected'); };
+  ws.onclose = () => { connectionOk = false; console.log('[renderer] WS closed, retry in 3s'); statusLog('ws closed, retry in 3s'); setTimeout(connectWS, 3000); };
+  ws.onerror = (e) => { console.log('[renderer] WS error'); ws.close(); };
   ws.onmessage = (e) => {
-    try { handleMessage(JSON.parse(e.data)); } catch(ex) {}
+    try { handleMessage(JSON.parse(e.data)); } catch(ex) { console.log('[renderer] WS parse error:', ex); }
   };
 }
 
 function send(msg) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
 
 function handleMessage(msg) {
+  console.log('[renderer] received:', msg.type, msg.expression||'', msg.text ? msg.text.slice(0,20) : '');
   switch(msg.type) {
-    case 'perform': perform(msg); break;
+    case 'perform': console.log('[renderer] perform: text=' + !!msg.text + ' expr=' + msg.expression + ' actions=' + JSON.stringify(msg.actions) + ' audio=' + !!msg.audio_url); perform(msg); break;
     case 'cancel': cancel(); break;
     case 'thinking': statusLog(msg.state === 'start' ? 'thinking...' : ''); break;
-    case 'emotion': break; // 面板使用
+    case 'emotion': break;
     case 'mode': statusLog('mode: ' + msg.mode); break;
   }
 }

@@ -406,11 +406,18 @@ class Brain:
 
     async def _broadcast_perform(self, text, expression, actions, audio_url):
         """构造 + 广播 perform 消息"""
+        # 规范化 actions: 兼容字符串和对象格式
+        normalized = []
+        for a in (actions or []):
+            if isinstance(a, str):
+                normalized.append({"name": a, "at": 0})
+            elif isinstance(a, dict) and "name" in a:
+                normalized.append({"name": a["name"], "at": a.get("at", 0)})
         msg = {
             "type": "perform",
             "text": text,
             "expression": expression,
-            "actions": actions,
+            "actions": normalized,
             "audio_url": audio_url,
         }
         await self._broadcast(msg)
