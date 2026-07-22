@@ -5,5 +5,5 @@ start "" /min cmd /c "cd /d %~dp0backend && python -m uvicorn app.main:app --hos
 
 ping 127.0.0.1 -n 3 >nul
 
-"%~dp0node_modules\electron\dist\electron.exe" "%~dp0"
+"%~dp0node_modules\electron\dist\electron.exe" .
 pause

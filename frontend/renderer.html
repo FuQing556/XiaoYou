@@ -107,6 +107,46 @@ async function init() {
 
   app.ticker.add(loop);
   connectWS();
+  setupShortcuts();
+}
+
+// ============================================================
+// 快捷键处理 (Electron IPC)
+// ============================================================
+function setupShortcuts() {
+  if (!window.electronAPI) { console.log('[renderer] no electronAPI (browser mode)'); return; }
+  window.electronAPI.onShortcut((action) => {
+    console.log('[renderer] shortcut:', action);
+    if (action === 'mode-quiet')      send({type:'mode', mode:'quiet'});
+    if (action === 'mode-balanced')   send({type:'mode', mode:'balanced'});
+    if (action === 'mode-chatty')     send({type:'mode', mode:'chatty'});
+    if (action === 'mode-sweet')      send({type:'mode', mode:'sweet'});
+    if (action === 'expr-neutral')    setExpression('neutral');
+    if (action === 'expr-star')       setExpression('star_eyes');
+    if (action === 'expr-blush')      setExpression('blush');
+    if (action === 'expr-dizzy')      setExpression('dizzy');
+    if (action === 'act-nod')         triggerAction('nod');
+    if (action === 'act-tilt')        triggerAction('tilt');
+    if (action === 'act-wink')        triggerAction('wink');
+    if (action === 'act-excited')     triggerAction('excited');
+    if (action === 'act-sad')         triggerAction('sad');
+    if (action === 'act-playful')     triggerAction('playful');
+  });
+}
+
+function triggerAction(name) {
+  const def = ACTION_MAP[name];
+  if (!def) return;
+  const now = animTime;
+  actionQueue.push({
+    name: name,
+    params: def.params,
+    dur: def.duration || def.dur || 2.0,
+    expr: def.expr || null,
+    start: now,
+    end: now + (def.duration || def.dur || 2.0),
+  });
+  if (def.expr) setExpression(def.expr);
 }
 
 // ============================================================

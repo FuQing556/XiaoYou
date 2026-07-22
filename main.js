@@ -95,16 +95,33 @@ function applyScale() {
 }
 
 function registerShortcuts() {
-  globalShortcut.register('CommandOrControl+Shift+Y', () => { win?.webContents.send('shortcut', 'cycle-mode'); });
+  // 模式 — 各自独立
+  globalShortcut.register('CommandOrControl+Shift+1', () => { win?.webContents.send('shortcut', 'mode-quiet'); });
+  globalShortcut.register('CommandOrControl+Shift+2', () => { win?.webContents.send('shortcut', 'mode-balanced'); });
+  globalShortcut.register('CommandOrControl+Shift+3', () => { win?.webContents.send('shortcut', 'mode-chatty'); });
+  globalShortcut.register('CommandOrControl+Shift+4', () => { win?.webContents.send('shortcut', 'mode-sweet'); });
+
+  // 表情
+  globalShortcut.register('CommandOrControl+Shift+Z', () => { win?.webContents.send('shortcut', 'expr-neutral'); });
+  globalShortcut.register('CommandOrControl+Shift+X', () => { win?.webContents.send('shortcut', 'expr-star'); });
+  globalShortcut.register('CommandOrControl+Shift+C', () => { win?.webContents.send('shortcut', 'expr-blush'); });
+  globalShortcut.register('CommandOrControl+Shift+V', () => { win?.webContents.send('shortcut', 'expr-dizzy'); });
+
+  // 动作
+  globalShortcut.register('CommandOrControl+Shift+Q', () => { win?.webContents.send('shortcut', 'act-nod'); });
+  globalShortcut.register('CommandOrControl+Shift+W', () => { win?.webContents.send('shortcut', 'act-tilt'); });
+  globalShortcut.register('CommandOrControl+Shift+E', () => { win?.webContents.send('shortcut', 'act-wink'); });
+  globalShortcut.register('CommandOrControl+Shift+R', () => { win?.webContents.send('shortcut', 'act-excited'); });
+  globalShortcut.register('CommandOrControl+Shift+T', () => { win?.webContents.send('shortcut', 'act-sad'); });
+  globalShortcut.register('CommandOrControl+Shift+Y', () => { win?.webContents.send('shortcut', 'act-playful'); });
+
   globalShortcut.register('CommandOrControl+Shift+H', () => { win?.isVisible() ? win.hide() : win?.show(); });
   globalShortcut.register('CommandOrControl+Shift+M', () => { win?.webContents.send('shortcut', 'toggle-mute'); });
   globalShortcut.register('CommandOrControl+Shift+Up', () => { if (scaleIndex < SCALES.length - 1) { scaleIndex++; applyScale(); } });
   globalShortcut.register('CommandOrControl+Shift+Down', () => { if (scaleIndex > 0) { scaleIndex--; applyScale(); } });
-  globalShortcut.register('CommandOrControl+Shift+Left', () => { win?.webContents.send('shortcut', 'mode-prev'); });
-  globalShortcut.register('CommandOrControl+Shift+Right', () => { win?.webContents.send('shortcut', 'mode-next'); });
   globalShortcut.register('CommandOrControl+Shift+D', () => { win?.webContents.openDevTools({ mode: 'detach' }); });
-  globalShortcut.register('CommandOrControl+Shift+R', () => { win?.webContents.reload(); });
-  globalShortcut.register('CommandOrControl+Shift+Q', () => { app.quit(); });
+  globalShortcut.register('CommandOrControl+Shift+F5', () => { win?.webContents.reload(); });
+  globalShortcut.register('CommandOrControl+Shift+Escape', () => { app.quit(); });
 }
 
 ipcMain.handle('send-to-backend', async () => ({ ok: true }));
