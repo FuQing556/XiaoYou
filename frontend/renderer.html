@@ -5,15 +5,21 @@
 <title>小悠 v2</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { background:transparent; overflow:hidden; font-family:system-ui; }
-#bubble { position:absolute; bottom:500px; left:50%; transform:translateX(-50%); background:rgba(255,255,255,0.92); color:#333; padding:8px 16px; border-radius:18px; font-size:14px; max-width:380px; text-align:center; display:none; white-space:pre-wrap; word-break:break-word; box-shadow:0 2px 12px rgba(0,0,0,0.1); pointer-events:none; }
+body { background:transparent; overflow:hidden; font-family:system-ui; -webkit-app-region:drag; user-select:none; }
+#bubble { position:absolute; bottom:500px; left:50%; transform:translateX(-50%); background:rgba(255,255,255,0.92); color:#333; padding:8px 16px; border-radius:18px; font-size:14px; max-width:380px; text-align:center; display:none; white-space:pre-wrap; word-break:break-word; box-shadow:0 2px 12px rgba(0,0,0,0.1); pointer-events:none; -webkit-app-region:no-drag; }
 #bubble::after { content:''; position:absolute; bottom:-8px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-top:8px solid rgba(255,255,255,0.92); }
-#status { position:fixed; top:4px; right:8px; font-size:11px; color:rgba(255,255,255,0.5); font-family:monospace; display:none; }
+#status { position:fixed; top:4px; right:8px; font-size:11px; color:rgba(255,255,255,0.5); font-family:monospace; display:none; -webkit-app-region:no-drag; }
+#watermark { position:fixed; bottom:8px; left:50%; transform:translateX(-50%); font-size:10px; color:rgba(255,255,255,0.3); pointer-events:none; }
+#input-box { position:absolute; top:375px; left:50%; transform:translateX(-50%); display:none; -webkit-app-region:no-drag; }
+#input-box input { width:300px; padding:6px 12px; border-radius:16px; border:1px solid rgba(255,255,255,0.4); background:rgba(0,0,0,0.5); color:#fff; font-size:13px; outline:none; }
+#input-box input::placeholder { color:rgba(255,255,255,0.4); }
 </style>
 </head>
 <body>
 <div id="bubble"></div>
 <div id="status"></div>
+<div id="watermark">XiaoYou v2</div>
+<div id="input-box"><input type="text" id="chat-input" placeholder="说点什么..." autofocus></div>
 
 <script src="../node_modules/pixi.js/dist/pixi.min.js"></script>
 <script src="lib/live2dcubismcore.min.js"></script>
@@ -45,32 +51,30 @@ let tailPhase = 0;
 // ── 表达式 + 动作定义 (与后端 personality.py 对应) ──
 const EXPR_PARAMS = {
   neutral: [],
-  star_eyes: [['Param107',1]],
-  blush: [['Param111',1]],
-  black_face: [['Param110',1]],
-  cry: [['Param113',1]],
-  dizzy: [['Param135',1]],
-  facepalm: [['Param83',1]],
+  star_eyes: [['Param107',100]],
+  blush: [['Param111',100]],
+  black_face: [['Param110',100]],
+  cry: [['Param113',100]],
+  dizzy: [['Param135',100]],
+  facepalm: [['Param83',100]],
 };
 
 const ACTION_MAP = {
-  // 复合动作
-  excited:    { params:[['Param107',1],['Param111',0.3],['Param27',1],['Param45',1],['ParamEyeLSmile',0.4],['ParamEyeRSmile',0.4]], dur:4.0, expr:'star_eyes' },
-  shy:        { params:[['Param111',1],['ParamAngleY',0.35],['ParamEyeBallX',0.35],['ParamEyeBallY',0.55],['Param27',0.5],['Param45',0.5]], dur:4.0, expr:'blush' },
-  proud:      { params:[['ParamAngleY',0.75],['ParamEyeLSmile',0.5],['ParamEyeRSmile',0.5],['Param27',1],['Param45',1]], dur:3.0 },
-  curious:    { params:[['ParamAngleZ',0.75],['ParamAngleY2',0.7],['ParamEyeLOpen',1],['ParamEyeROpen',1],['ParamEyeBallX',0.55],['Param27',1],['Param45',0.4]], dur:4.0 },
-  scared:     { params:[['Param135',1],['Param27',0],['Param45',0],['ParamAngleY2',0.3],['ParamEyeLOpen',1],['ParamEyeROpen',1]], dur:3.0, expr:'dizzy' },
-  angry:      { params:[['Param110',1],['Param27',0.1],['Param45',0.1],['ParamBrowLY',0.2],['ParamBrowRY',0.2]], dur:4.0, expr:'black_face' },
-  sad:        { params:[['Param113',1],['Param27',0.4],['Param45',0.4],['ParamAngleY',0.35],['ParamEyeBallY',0.3]], dur:5.0, expr:'cry' },
-  sleepy:     { params:[['ParamEyeLOpen',0.3],['ParamEyeROpen',0.3],['Param27',0.3],['Param45',0.3],['ParamMouthOpenY',0.6]], dur:3.0 },
-  thinking:   { params:[['Param83',0.6],['ParamAngleZ',0.6],['ParamEyeBallY',0.7],['ParamBrowLForm',0.3],['ParamBrowRForm',0.3]], dur:4.0, expr:'facepalm' },
-  surprised:  { params:[['ParamEyeLOpen',1],['ParamEyeROpen',1],['ParamMouthOpenY',0.6],['Param27',1],['Param45',1],['ParamAngleY2',0.35],['ParamBrowLY',0.8],['ParamBrowRY',0.8]], dur:3.0 },
-  playful:    { params:[['Param107',1],['Param27',1],['Param45',1],['ParamAngleY2',0.7],['ParamEyeLOpen',0.02],['ParamEyeROpen',1]], dur:3.0, expr:'star_eyes' },
-  // 独立动作
-  nod:        { params:[['ParamAngleX',0.8]], dur:1.2 },
-  shake:      { params:[['ParamAngleZ',0.8]], dur:1.0 },
-  wink:       { params:[['ParamEyeROpen',0.02]], dur:0.35 },
-  tilt:       { params:[['ParamAngleZ',0.75]], dur:2.5 },
+  excited:    { params:[['Param107',100],['Param111',30],['Param27',100],['Param45',100],['ParamEyeLSmile',40],['ParamEyeRSmile',40]], dur:4.0, expr:'star_eyes' },
+  shy:        { params:[['Param111',100],['ParamAngleY',35],['ParamEyeBallX',35],['ParamEyeBallY',55],['Param27',50],['Param45',50]], dur:4.0, expr:'blush' },
+  proud:      { params:[['ParamAngleY',75],['ParamEyeLSmile',50],['ParamEyeRSmile',50],['Param27',100],['Param45',100]], dur:3.0 },
+  curious:    { params:[['ParamAngleZ',75],['ParamAngleY2',70],['ParamEyeLOpen',100],['ParamEyeROpen',100],['ParamEyeBallX',55],['Param27',100],['Param45',40]], dur:4.0 },
+  scared:     { params:[['Param135',100],['Param27',0],['Param45',0],['ParamAngleY2',30],['ParamEyeLOpen',100],['ParamEyeROpen',100]], dur:3.0, expr:'dizzy' },
+  angry:      { params:[['Param110',100],['Param27',10],['Param45',10],['ParamBrowLY',20],['ParamBrowRY',20]], dur:4.0, expr:'black_face' },
+  sad:        { params:[['Param113',100],['Param27',40],['Param45',40],['ParamAngleY',35],['ParamEyeBallY',30]], dur:5.0, expr:'cry' },
+  sleepy:     { params:[['ParamEyeLOpen',30],['ParamEyeROpen',30],['Param27',30],['Param45',30],['ParamMouthOpenY',60]], dur:3.0 },
+  thinking:   { params:[['Param83',60],['ParamAngleZ',60],['ParamEyeBallY',70],['ParamBrowLForm',30],['ParamBrowRForm',30]], dur:4.0, expr:'facepalm' },
+  surprised:  { params:[['ParamEyeLOpen',100],['ParamEyeROpen',100],['ParamMouthOpenY',60],['Param27',100],['Param45',100],['ParamAngleY2',35],['ParamBrowLY',80],['ParamBrowRY',80]], dur:3.0 },
+  playful:    { params:[['Param107',100],['Param27',100],['Param45',100],['ParamAngleY2',70],['ParamEyeLOpen',2],['ParamEyeROpen',100]], dur:3.0, expr:'star_eyes' },
+  nod:        { params:[['ParamAngleX',80]], dur:1.2 },
+  shake:      { params:[['ParamAngleZ',80]], dur:1.0 },
+  wink:       { params:[['ParamEyeROpen',2]], dur:0.35 },
+  tilt:       { params:[['ParamAngleZ',75]], dur:2.5 },
 };
 
 // ============================================================

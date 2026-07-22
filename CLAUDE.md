@@ -1,8 +1,22 @@
-# 小悠 v2
+# 小悠 v2 — 已放弃
 
-Live2D 桌面猫娘。Electron 透明窗口 + PixiJS v7 + Cubism 5 Core + FastAPI + DeepSeek。
+> **状态：项目终止。** 此仓库为失败记录，保留供参考。不推荐使用任何代码。
 
-**v2 原则：前端零智能，后端单一决策路径，模块单向依赖。**
+Live2D 桌面猫娘项目。由 Claude Fable 5 (Anthropic) 辅助开发，2026-07-21 ~ 2026-07-22。
+
+## 停止原因
+
+AI 辅助开发在多轮迭代中累积了大量错误，最终产出不可用。详见 `POSTMORTEM.md`。
+
+## 文件清单
+
+- `POSTMORTEM.md` — 项目复盘与反思
+- `model/` — Live2D 悠小喵模型 (唯一有价值的资产)
+- `frontend/renderer.html` — 渲染器 (仅基础模型加载可用)
+- `backend/` — Python 后端 (未经全面测试)
+- `main.js` — Electron 主进程
+- `start.bat` — 启动脚本 (可用)
+- `KEYBINDINGS.txt` — 快捷键参考
 
 ---
 

@@ -128,6 +128,12 @@ ipcMain.handle('send-to-backend', async () => ({ ok: true }));
 
 const isDev = process.argv.includes('--dev');
 
+ipcMain.handle('screenshot', async () => {
+  if (!win) return null;
+  const img = await win.webContents.capturePage();
+  return img.toDataURL();
+});
+
 app.whenReady().then(() => {
   log('[START] XiaoYou v2 launching...');
   log(`[START] Project dir: ${__dirname}`);
